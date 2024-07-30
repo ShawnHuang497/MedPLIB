@@ -180,11 +180,11 @@ Any deployed use case of the model --- commercial or otherwise --- is out of sco
 # ✏️Citation
 If you find our paper and code useful in your research, please consider giving a star and citation.
 
-```BibTeX
+<!-- ```BibTeX
 @article{huang2024medplib,
   title={Towards a Multimodal Large Language Model with Pixel-Level Insight for Biomedicine},
   author={Xiaoshuang Huang, Lindong Shen},
   journal={arXiv preprint arXiv:2406.xxxx},
   year={2024}
 }
-```
+``` -->
