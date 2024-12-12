@@ -1,5 +1,7 @@
 
-The official respository of MedPLIB: Towards a Multimodal Large Language Model with Pixel-Level Insight for Biomedicine.
+This paper was accepted by AAAI2025. The code and model weights will be released a few days later. 
+
+The official repository of MedPLIB: Towards a Multimodal Large Language Model with Pixel-Level Insight for Biomedicine.
 <p align="center">
     <img src="assets/logo.png" width="150" style="margin-bottom: 0.2;"/>
 <p>
