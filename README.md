@@ -35,8 +35,10 @@ MedPLIB shows excellent performance in pixel-level understanding in biomedical f
 
 
 # 🔥 Updates
-- 2024-06-14: We release the code.
-- 2024-06-14: We release the paper.
+- 2024-12-19: We release the code.
+- 2024-12-10: We release the paper.
+- 2024-12-09: This paper was accepted by AAAI2025. 🍒
+- 2024-06-14: We release the code link.
 
 
 # Contents
