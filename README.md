@@ -1,9 +1,14 @@
 
-The official respository of MedPLIB: Towards a Multimodal Large Language Model with Pixel-Level Insight for Biomedicine.
+
+
+<!-- The official repository of MedPLIB: Towards a Multimodal Large Language Model with Pixel-Level Insight for Biomedicine. -->
 <p align="center">
     <img src="assets/logo.png" width="150" style="margin-bottom: 0.2;"/>
 <p>
 <h2 align="center"> <a href="">Towards a Multimodal Large Language Model with Pixel-Level Insight for Biomedicine</a></h2>
+<a src="https://img.shields.io/badge/cs.CV-2312.09278-b31b1b?logo=arxiv&logoColor=red" href="https://arxiv.org/pdf/2412.09278"> <img src="https://img.shields.io/badge/cs.CV-2412.09278-b31b1b?logo=arxiv&logoColor=red">
+</a> 
+
 <h5 align="center"> If you like our project, please give us a star ⭐ on GitHub for latest update. 
 
 
@@ -182,10 +187,10 @@ Any deployed use case of the model --- commercial or otherwise --- is out of sco
 If you find our paper and code useful in your research, please consider giving a star and citation.
 
 ```BibTeX
-@article{huang2024medplib,
+@article{huang2024towards,
   title={Towards a Multimodal Large Language Model with Pixel-Level Insight for Biomedicine},
-  author={Xiaoshuang Huang, Lindong Shen},
-  journal={arXiv preprint arXiv:2406.xxxx},
+  author={Huang, Xiaoshuang and Shen, Lingdong and Liu, Jia and Shang, Fangxin and Li, Hongxiang and Huang, Haifeng and Yang, Yehui},
+  journal={arXiv preprint arXiv:2412.09278},
   year={2024}
 }
 ```
