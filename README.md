@@ -30,7 +30,8 @@ MedPLIB shows excellent performance in pixel-level understanding in biomedical f
 
 
 # 🔥 Updates
-- 2024-07-30: We release the readme.md
+- 2024-06-14: We release the code.
+- 2024-06-14: We release the paper.
 
 
 # Contents
@@ -61,16 +62,16 @@ python -m model.serve.gradio_web_server --controller http://localhost:64000 --mo
 
 ```bash
 # launch the model worker
-CUDA_VISIBLE_DEVICES=0 python -m model.serve.model_worker --host localhost --controller http://localhost:64000 --port 64002 --worker http://localhost:64002 --model-path /path/to/the/medplib_checkpoints --add_region_feature --device_map cuda
+CUDA_VISIBLE_DEVICES=0 python -m model.serve.model_worker --host localhost --controller http://localhost:64000 --port 64002 --worker http://localhost:64002 --model-path /path/to/the/medplib_checkpoints --add_region_feature --device_map cuda --vision_pretrained /path/to/the/sam-med2d_b.pth
 ```
 
-- Region VQA: 
+- Pixel grounding: 
 <p align="center">
     <img src="assets/seg.gif"  style="width: 70%;"/>
 <p>
 
 
-- Pixel grounding:
+- Region VQA:
 <p align="center">
     <img src="assets/rqa.gif"  style="width: 70%;"/>
 <p>
@@ -146,7 +147,7 @@ TRANSFORMERS_OFFLINE=1 deepspeed --include=localhost:1 --master_port=64995 model
 ### Region_VQA & VQA
 Infer to generate the prediction jsonl file.
 ```Shell
-sh model/eval/infer_parallel_bird.sh
+sh model/eval/infer_parallel_medplib.sh
 ```
 
 Calcuate the metrics.
@@ -180,11 +181,11 @@ Any deployed use case of the model --- commercial or otherwise --- is out of sco
 # ✏️Citation
 If you find our paper and code useful in your research, please consider giving a star and citation.
 
-<!-- ```BibTeX
+```BibTeX
 @article{huang2024medplib,
   title={Towards a Multimodal Large Language Model with Pixel-Level Insight for Biomedicine},
   author={Xiaoshuang Huang, Lindong Shen},
   journal={arXiv preprint arXiv:2406.xxxx},
   year={2024}
 }
-``` -->
+```

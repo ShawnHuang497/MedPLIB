@@ -1,0 +1,12 @@
+**/__pycache__
+runs/
+runs_legacy/
+.vscode/
+
+sam.log
+tower.log
+stage2-1_param.log
+projector.log
+# scripts/
+serve_logs
+serve_images/*
