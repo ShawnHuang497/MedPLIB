@@ -93,7 +93,7 @@ CUDA_VISIBLE_DEVICES=0 python -m model.serve.model_worker --host localhost --con
 
 1. Clone this repository and navigate to MedPLIB folder
 ```bash
-git clone https://github.com/ShawnHuang497/MedPLIB
+git clone https://github.com/ShawnHuang497/MedPLIB.git
 cd MedPLIB
 ```
 
