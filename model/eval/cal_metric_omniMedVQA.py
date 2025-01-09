@@ -29,7 +29,7 @@ def load_jsonl(path):
     return data 
 
 def get_name_type():
-    root_path = '/tmp/v2_mnt/HCG/huangxiaoshuang/med-vqa-dataset/OmniMedVQA/QA_information/Open-access'
+    root_path = '/public/home/s20213081508/huangxiaoshuang/data/OmniMedVQA/QA_information/Open-access'
     name_type_dict = {}
     for subdir, _, files in os.walk(root_path):
         for file in files:

@@ -79,4 +79,13 @@ TRANSFORMERS_OFFLINE=1 deepspeed --include=localhost:0 --master_port=64995 model
     # --return_gating_logit \
     # --vis_mask \
 
-
+TRANSFORMERS_OFFLINE=1 deepspeed --include=localhost:0 --master_port=64995 model/eval/vqa_infer.py \
+    --version="/public/home/s20213081508/huangxiaoshuang/huggingface/MedPLIB-7b-2e" \
+    --vision_tower='/public/home/s20213081508/huangxiaoshuang/huggingface/clip-vit-large-patch14-336' \
+    --answer_type='open' \
+    --val_data_path='/public/home/s20213081508/huangxiaoshuang/MedPLIB/MeCoVQA/MeCoVQA_Grounding_test.json' \
+    --image_folder='/public/home/s20213081508/huangxiaoshuang/data/SA-2D-20M/GMAI___SA-Med2D-20M/raw/SAMed2Dv1' \
+    --vision_pretrained="/public/home/s20213081508/huangxiaoshuang/huggingface/sam-med2d_b.pth" \
+    --eval_seg \
+    --moe_enable \
+    --region_fea_adapter \

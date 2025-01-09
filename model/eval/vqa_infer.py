@@ -1,17 +1,14 @@
-#!/public/home/s20213081508/miniconda3/envs/bird2/bin/python
-
 import argparse
 import sys
-print('3'*400,sys.executable)
 import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 import shutil
-import sys
 import time
 from functools import partial
 import types
 import math
 import random
-# import shortuuid
+import shortuuid
 import json
 
 import deepspeed
@@ -65,7 +62,7 @@ def parse_args(args):
 
 
     parser.add_argument("--val_batch_size", default=1, type=int)
-    parser.add_argument("--workers", default=4, type=int)
+    parser.add_argument("--workers", default=1, type=int)
     parser.add_argument("--ce_loss_weight", default=1.0, type=float)
     parser.add_argument("--dice_loss_weight", default=0.5, type=float)
     parser.add_argument("--bce_loss_weight", default=2.0, type=float)
@@ -218,7 +215,8 @@ def main(args):
     model_args['test_only'] = True
     if args.moe_enable:
         model = MedPLIBForCausalLM.from_pretrained(
-        args.version, torch_dtype=torch_dtype, low_cpu_mem_usage=True, ignore_mismatched_sizes=True,**model_args
+        args.version, torch_dtype=torch_dtype, low_cpu_mem_usage=True, ignore_mismatched_sizes=True,
+        **model_args
     )
     else:
         # load LLM and tower weights
@@ -410,11 +408,12 @@ def validate_vqa(val_loader, model_engine, epoch, args, tokenizer, fea_hooks=Non
 
         indices = (input_dict['input_ids'] == 29901).nonzero(as_tuple=True)
         input_ids = input_dict['input_ids'][:, :indices[1][-1]+1]
-        # print(input_dict['images_clip'], 'images_clipimages_clip')
+        attention_mask = input_dict['attention_mask'][:, :indices[1][-1]+1]
         with torch.no_grad():
             output_ids = model_engine.generate(
                 input_ids,
                 images=input_dict['images_clip'],
+                attention_mask=attention_mask,
                 do_sample=True if args.temperature > 0 else False,
                 temperature=args.temperature,
                 top_p=args.top_p,
@@ -504,6 +503,7 @@ def validate_seg(val_loader, model_engine, epoch, args, tokenizer, fea_hooks=Non
 
         indices = (input_dict['input_ids'] == 29901).nonzero(as_tuple=True)
         input_ids = input_dict['input_ids'][:, :indices[1][-1]+1]
+        attention_mask = input_dict['attention_mask'][:, :indices[1][-1]+1]
         with torch.no_grad():
             # output_dict = model_engine(**input_dict)
             output_ids, pred_masks = model_engine.evaluate(
@@ -514,6 +514,7 @@ def validate_seg(val_loader, model_engine, epoch, args, tokenizer, fea_hooks=Non
             input_dict['label_list'],
             max_new_tokens=1024,
             tokenizer=tokenizer,
+            attention_mask=attention_mask
         )
         if fea_hooks is not None:
 

@@ -17,7 +17,7 @@ ROOT_PATH="/root/paddlejob/workspace/env_run/data/huangxiaoshuang/jsons"
 
 DATA_TYPE="MeCoVQA"
 # SPLIT="MeCoVQA_Complex_VQA_test"
-SPLIT="MeCoVQA_Region_QA_test"
+SPLIT="MeCoVQA_Region_VQA_test"
 
 ### For public dataset
 # ROOT_PATH="/tmp/v2_mnt/HCG/huangxiaoshuang/med-vqa-dataset"
