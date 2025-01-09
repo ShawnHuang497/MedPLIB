@@ -35,9 +35,10 @@ MedPLIB shows excellent performance in pixel-level understanding in biomedical f
 
 
 # 🔥 Updates
+- 2025-01-09: 🔥🔥🔥 We release the model weight and MeCoVQA dataset.
 - 2024-12-19: We release the code.
 - 2024-12-10: We release the paper.
-- 2024-12-09: This paper was accepted by AAAI2025. 🍒
+- 2024-12-09: 🔥🔥🔥 This paper was accepted by AAAI2025. 
 - 2024-06-14: We release the code link.
 
 
@@ -47,6 +48,7 @@ MedPLIB shows excellent performance in pixel-level understanding in biomedical f
 - [Dataset](#🗃️Dataset)
 - [Train](#📀Train)
 - [Test](#Test)
+- [Model Zoo](#Model_Zoo)
 - [Acknowledgement](#👍Acknowledgement)
 - [License](#🔒License)
 - [Model Use](#🪜Model-Use)
@@ -112,7 +114,8 @@ pip install flash-attn==2.5.2 --no-build-isolation
 ```
 
 # 🗃️Dataset
-On the way...
+1. Please download MeCoVQA dataset from [Google Drive](https://drive.google.com/file/d/1zIZJ5OBmV3OPc41H_Iaz9mdEh7wHmHqv/view?usp=drive_link).
+2. Download the images from SA-Med2D-20M at [Huggingface](https://huggingface.co/datasets/OpenGVLab/SA-Med2D-20M).
 
 # 📀Train
 ## Stage I
@@ -132,6 +135,9 @@ sh scripts/train_stage3.sh
 sh scripts/train_stage4.sh
 ```
 
+
+# 🥭 Model_Zoo
+Please download MedPLIB model weight from [Huggingface](https://huggingface.co/Huangxs/MedPLIB-7b-2e).
 
 # 🥭 Test
 
