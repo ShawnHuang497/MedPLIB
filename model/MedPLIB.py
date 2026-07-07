@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from transformers import BitsAndBytesConfig, CLIPVisionModel
 
 from utils.utils import (DEFAULT_IM_END_TOKEN, DEFAULT_IM_START_TOKEN,
-                         DEFAULT_IMAGE_PATCH_TOKEN)
+                         DEFAULT_IMAGE_PATCH_TOKEN, IMAGE_TOKEN_INDEX)
 
 from .medplib.model.language_model.medplib_llama import (LlavaLlamaForCausalLM,
                                                      LlavaLlamaModel)
@@ -221,6 +221,10 @@ class MedPLIBForCausalLM(MedPLIBMoELlamaForCausalLM):
 
 
         # config.mm_vision_tower = config.vision_tower
+        config.icl_mask_encoder = kwargs.get("icl_mask_encoder", getattr(config, "icl_mask_encoder", False))
+        config.mask_encoder_token_count = kwargs.get("mask_encoder_token_count", getattr(config, "mask_encoder_token_count", 64))
+        config.mm_token_compress = kwargs.get("mm_token_compress", getattr(config, "mm_token_compress", False))
+        config.mm_compressed_token_count = kwargs.get("mm_compressed_token_count", getattr(config, "mm_compressed_token_count", 256))
        
         self.ce_loss_weight = kwargs.pop("ce_loss_weight", None)
         self.dice_loss_weight = kwargs.pop("dice_loss_weight", None)
@@ -303,6 +307,53 @@ class MedPLIBForCausalLM(MedPLIBMoELlamaForCausalLM):
         # print(len(image_embeddings_expanded), image_embeddings_expanded.shape)  # 输出应为 [8, 256, 64, 64]
         return image_embeddings_expanded
 
+    def build_seg_token_mask(
+        self,
+        input_ids: torch.LongTensor,
+        image_token_len: Optional[int] = None,
+        image_token_lengths: Optional[List[List[int]]] = None,
+    ):
+        """Expand SEG positions to match hidden states after image token replacement."""
+        if image_token_len is None:
+            image_token_len = (
+                getattr(self.config, "mm_compressed_token_count", 256)
+                if getattr(self.config, "mm_token_compress", False)
+                else self.get_model().get_vision_tower().num_patches
+            )
+
+        shifted_seg_mask = torch.zeros_like(input_ids, dtype=torch.bool)
+        shifted_seg_mask[:, :-1] = input_ids[:, 1:] == self.seg_token_idx
+
+        expanded_masks = []
+        for batch_idx, (cur_input_ids, cur_seg_mask) in enumerate(zip(input_ids, shifted_seg_mask)):
+            cur_expanded = []
+            cur_image_idx = 0
+            for token_id, is_seg_position in zip(cur_input_ids, cur_seg_mask):
+                if token_id == IMAGE_TOKEN_INDEX:
+                    cur_image_token_len = image_token_len
+                    if (
+                        image_token_lengths is not None
+                        and len(image_token_lengths) > batch_idx
+                        and len(image_token_lengths[batch_idx]) > cur_image_idx
+                    ):
+                        cur_image_token_len = image_token_lengths[batch_idx][cur_image_idx]
+                    cur_image_idx += 1
+                    cur_expanded.append(
+                        torch.zeros(cur_image_token_len, dtype=torch.bool, device=input_ids.device)
+                    )
+                else:
+                    cur_expanded.append(is_seg_position.view(1))
+            expanded_masks.append(torch.cat(cur_expanded, dim=0))
+
+        max_len = max(mask.shape[0] for mask in expanded_masks)
+        padded_masks = []
+        for mask in expanded_masks:
+            if mask.shape[0] < max_len:
+                pad = torch.zeros(max_len - mask.shape[0], dtype=torch.bool, device=mask.device)
+                mask = torch.cat([mask, pad], dim=0)
+            padded_masks.append(mask)
+        return torch.stack(padded_masks, dim=0)
+
 
 
     def forward(self, **kwargs):
@@ -361,21 +412,9 @@ class MedPLIBForCausalLM(MedPLIBMoELlamaForCausalLM):
             batch_size = image_embeddings.shape[0]
             # assert batch_size == len(offset) - 1
 
-            # B*q_num, sequence_length-1
-            seg_token_mask = input_ids[:, 1:] == self.seg_token_idx
-            # B*q_num, sequence_length+1
-            seg_token_mask = torch.cat(
-                [
-                    seg_token_mask,
-                    torch.zeros((seg_token_mask.shape[0], 1)).bool().cuda(),
-                ],
-                dim=1,
-            )
-            # hack for IMAGE_TOKEN_INDEX (we suppose that there is only one image, and it is in the front)
-            # B*q_num, 255+sequence_length
-            seg_token_mask = torch.cat(
-                [torch.zeros((seg_token_mask.shape[0], 575)).bool().cuda(), seg_token_mask],
-                dim=1,
+            seg_token_mask = self.build_seg_token_mask(
+                input_ids,
+                image_token_lengths=kwargs.get("image_token_lengths", None),
             )
 
         output = super().forward(
@@ -386,6 +425,8 @@ class MedPLIBForCausalLM(MedPLIBMoELlamaForCausalLM):
             output_hidden_states=True,
             region_masks=region_masks,
             valid_region_masks_bool=valid_region_masks_bool,
+            mask_images=kwargs.get("mask_images", None),
+            image_token_types=kwargs.get("image_token_types", None),
         )
         # 33, B*q_num, N, 4096
         output_hidden_states = output.hidden_states
@@ -418,6 +459,8 @@ class MedPLIBForCausalLM(MedPLIBMoELlamaForCausalLM):
             last_hidden_state = torch.unsqueeze(last_hidden_state, dim=0)
         # B*q_num, 255+sequence_length, 256  [B*q_num, 255+sequence_length]  --> B*q_num, 256
         pred_embeddings = last_hidden_state[seg_token_mask]
+        if kwargs.get("icl_image_counts") is not None and len(masks_list) > 0:
+            pred_embeddings = pred_embeddings[-len(masks_list):]
 
 
         # B*q_num
@@ -541,6 +584,9 @@ class MedPLIBForCausalLM(MedPLIBMoELlamaForCausalLM):
         tokenizer=None,
         attention_mask=None,
         inference_demo=False,
+        mask_images=None,
+        image_token_types=None,
+        image_token_lengths=None,
     ):
         with torch.no_grad():
             outputs = self.generate(
@@ -548,6 +594,8 @@ class MedPLIBForCausalLM(MedPLIBMoELlamaForCausalLM):
                 input_ids=input_ids,
                 region_masks=region_masks,
                 valid_region_masks_bool=valid_region_masks_bool,
+                mask_images=mask_images,
+                image_token_types=image_token_types,
                 max_new_tokens=max_new_tokens,
                 do_sample=False,
                 num_beams=1,
@@ -571,13 +619,9 @@ class MedPLIBForCausalLM(MedPLIBMoELlamaForCausalLM):
                 pred_masks = []
                 return output_ids, pred_masks
             else:
-                # hack for IMAGE_TOKEN_INDEX (we suppose that there is only one image, and it is in the front)
-                seg_token_mask = torch.cat(
-                    [
-                        torch.zeros((seg_token_mask.shape[0], 575)).bool().cuda(),
-                        seg_token_mask,
-                    ],
-                    dim=1,
+                seg_token_mask = self.build_seg_token_mask(
+                    output_ids,
+                    image_token_lengths=image_token_lengths,
                 )
 
                 hidden_states = []
@@ -596,7 +640,7 @@ class MedPLIBForCausalLM(MedPLIBMoELlamaForCausalLM):
                 if pred_embeddings.shape[0] > 1:
                     pred_embeddings = pred_embeddings[:1, :]
                 # use the last hidden state when there is no seg tokens
-                elif pred_embeddings.shape[0]:
+                elif pred_embeddings.shape[0] == 0:
                     pred_embeddings = last_hidden_state[:1, -2:-1, :].squeeze(1)
 
                 seg_token_counts = seg_token_mask.int().sum(-1)  # [bs, ]

@@ -66,6 +66,8 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
         return_dict: Optional[bool] = None,
         region_masks: Optional[List[torch.Tensor]] = None,
         valid_region_masks_bool: Optional[List[torch.BoolTensor]] = [],
+        mask_images: Optional[List[torch.Tensor]] = None,
+        image_token_types: Optional[List[List[str]]] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         output_attentions = (
             output_attentions
@@ -88,7 +90,8 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
             inputs_embeds,
             labels,
         ) = self.prepare_inputs_labels_for_multimodal(
-            input_ids, attention_mask, past_key_values, labels, images, region_masks, valid_region_masks_bool
+            input_ids, attention_mask, past_key_values, labels, images, region_masks, valid_region_masks_bool,
+            mask_images=mask_images, image_token_types=image_token_types
         )
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
 
@@ -151,6 +154,8 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
         attention_mask=None,
         inputs_embeds=None,
         images=None,
+        mask_images=None,
+        image_token_types=None,
         **kwargs
     ):
         if past_key_values:
@@ -168,6 +173,8 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
                 "images": images,
+                "mask_images": mask_images,
+                "image_token_types": image_token_types,
             }
         )
         return model_inputs

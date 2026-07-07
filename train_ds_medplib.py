@@ -20,7 +20,7 @@ from model.LISA import LISAForCausalLM
 from model.MedPLIB import MedPLIBForCausalLM
 from model.medplib import conversation as conversation_lib
 # from utils.dataset import HybridDataset, ValDataset, collate_fn
-from datasets import LazySupervisedDataset, DataCollatorForSupervisedDataset
+from datasets import ICLLazySupervisedDataset, LazySupervisedDataset, DataCollatorForSupervisedDataset
 from utils.utils import (DEFAULT_IM_END_TOKEN, DEFAULT_IM_START_TOKEN,
                          AverageMeter, ProgressMeter, Summary, dict_to_cuda,
                          intersectionAndUnionGPU, ADD_OTHERS_TOKENS)
@@ -65,6 +65,12 @@ def parse_args(args):
     parser.add_argument('--is_multimodal', type=bool, default=True, help='Whether to use multimodal data.')
     parser.add_argument('--data_path', type=str, default='/path/to/xxx.json', help='Path to the JSON file containing the data.')
     parser.add_argument('--val_data_path', type=str, default='/path/to/xxx.json', help='Path to the JSON file containing the data.')
+    parser.add_argument('--icl_enable', action='store_true', default=False, help='Enable MedPLIB-ICL multi-image in-context segmentation data.')
+    parser.add_argument('--icl_mask_mode', type=str, default='overlay', choices=['overlay', 'separate'], help='How MedPLIB-ICL encodes example masks.')
+    parser.add_argument('--icl_mask_encoder', action='store_true', default=False, help='Encode ICL example masks with a lightweight 64-token mask encoder.')
+    parser.add_argument('--mask_encoder_token_count', type=int, default=64, help='Number of tokens emitted by the optional ICL mask encoder.')
+    parser.add_argument('--mm_token_compress', action='store_true', default=False, help='Compress CLIP image tokens before feeding the LLM.')
+    parser.add_argument('--mm_compressed_token_count', type=int, default=256, help='Number of tokens after optional CLIP token compression.')
 
     # ---------------- Training setting -----------------
     parser.add_argument("--log_base_dir", default="./runs", type=str)
@@ -135,6 +141,11 @@ def parse_args(args):
 def rank0_print(*args):
     if local_rank == 0:
         print(*args)
+
+def cast_images_clip(images_clip, dtype):
+    if isinstance(images_clip, list):
+        return [image.to(dtype=dtype) for image in images_clip]
+    return images_clip.to(dtype=dtype)
 
 
 def set_seed(seed=42):
@@ -345,16 +356,22 @@ def main(args):
                 "is_multimodal": args.is_multimodal,
                 "mm_use_im_start_end": args.use_mm_start_end,
                 "data_path": args.data_path,
+                "icl_mask_mode": args.icl_mask_mode,
+                "icl_mask_encoder": args.icl_mask_encoder,
+                "mask_encoder_token_count": args.mask_encoder_token_count,
+                "mm_token_compress": args.mm_token_compress,
+                "mm_compressed_token_count": args.mm_compressed_token_count,
                 "image_processor": vision_tower.image_processor
                 }
     data_args = types.SimpleNamespace(**data_args)
-    train_dataset = LazySupervisedDataset(args.data_path, tokenizer, data_args, args.sam_img_size)
+    dataset_cls = ICLLazySupervisedDataset if args.icl_enable else LazySupervisedDataset
+    train_dataset = dataset_cls(args.data_path, tokenizer, data_args, args.sam_img_size)
 
     args.steps_per_epoch = math.ceil(math.ceil(len(train_dataset) / (args.batch_size * torch.cuda.device_count())) / args.grad_accumulation_steps)
 
     if args.no_eval == False:
 
-        val_dataset = LazySupervisedDataset(args.val_data_path, tokenizer, data_args, args.sam_img_size)
+        val_dataset = dataset_cls(args.val_data_path, tokenizer, data_args, args.sam_img_size)
         
         print(
             f"Training with {len(train_dataset)} examples and validating with {len(val_dataset)} examples. steps in one epoch: {args.steps_per_epoch}"
@@ -571,13 +588,13 @@ def train(
 
             if args.precision == "fp16":
                 input_dict["images"] = input_dict["images"].half()
-                input_dict["images_clip"] = input_dict["images_clip"].half()
+                input_dict["images_clip"] = cast_images_clip(input_dict["images_clip"], torch.float16)
             elif args.precision == "bf16":
                 input_dict["images"] = input_dict["images"].bfloat16()
-                input_dict["images_clip"] = input_dict["images_clip"].bfloat16()
+                input_dict["images_clip"] = cast_images_clip(input_dict["images_clip"], torch.bfloat16)
             else:
                 input_dict["images"] = input_dict["images"].float()
-                input_dict["images_clip"] = input_dict["images_clip"].float()
+                input_dict["images_clip"] = cast_images_clip(input_dict["images_clip"], torch.float32)
 
             output_dict = model(**input_dict)
 
@@ -717,13 +734,13 @@ def validate(val_loader, model_engine, epoch, writer, args):
         input_dict = dict_to_cuda(input_dict)
         if args.precision == "fp16":
             input_dict["images"] = input_dict["images"].half()
-            input_dict["images_clip"] = input_dict["images_clip"].half()
+            input_dict["images_clip"] = cast_images_clip(input_dict["images_clip"], torch.float16)
         elif args.precision == "bf16":
             input_dict["images"] = input_dict["images"].bfloat16()
-            input_dict["images_clip"] = input_dict["images_clip"].bfloat16()
+            input_dict["images_clip"] = cast_images_clip(input_dict["images_clip"], torch.bfloat16)
         else:
             input_dict["images"] = input_dict["images"].float()
-            input_dict["images_clip"] = input_dict["images_clip"].float()
+            input_dict["images_clip"] = cast_images_clip(input_dict["images_clip"], torch.float32)
 
         with torch.no_grad():
             output_dict = model_engine(**input_dict)

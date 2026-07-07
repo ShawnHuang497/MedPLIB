@@ -66,6 +66,11 @@ def DataCollatorForSupervisedDataset(list_data_dict: Sequence[Dict], inference: 
                 valid_region_masks_bool.append([torch.zeros(1).bool()])
 
     image_path_list = []
+    icl_image_path_list = []
+    icl_image_count_list = []
+    mask_images_list = []
+    image_token_types_list = []
+    image_token_lengths_list = []
     images_list = []
     images_clip_list = []
     conversation_list = []
@@ -79,6 +84,12 @@ def DataCollatorForSupervisedDataset(list_data_dict: Sequence[Dict], inference: 
     cnt = 0
     for data_dict in list_data_dict:
         image_path_list.append(data_dict.get('image_path', None))
+        icl_image_path_list.append(data_dict.get('icl_image_paths', []))
+        icl_image_count_list.append(data_dict.get('icl_image_count', 1))
+        if data_dict.get('mask_images', torch.empty(0)).numel() > 0:
+            mask_images_list.append(data_dict.get('mask_images'))
+        image_token_types_list.append(data_dict.get('image_token_types', ['image']))
+        image_token_lengths_list.append(data_dict.get('image_token_lengths', []))
         images_list.append(data_dict.get('image_sam', None))
         images_clip_list.append(data_dict.get('image_clip', None))
         conversation_list.extend(data_dict.get('conversations', None))
@@ -91,10 +102,20 @@ def DataCollatorForSupervisedDataset(list_data_dict: Sequence[Dict], inference: 
         offset_list.append(cnt)
         answer_type_list.append(data_dict.get('answer_type', None))
 
+    if images_clip_list and images_clip_list[0].dim() == 4:
+        images_clip = images_clip_list
+    else:
+        images_clip = torch.stack(images_clip_list, dim=0)
+
     final_batch = {
             "image_paths": image_path_list,
+            "icl_image_paths": icl_image_path_list,
+            "icl_image_counts": icl_image_count_list,
+            "mask_images": mask_images_list,
+            "image_token_types": image_token_types_list,
+            "image_token_lengths": image_token_lengths_list,
             "images": torch.stack(images_list, dim=0),
-            "images_clip": torch.stack(images_clip_list, dim=0),
+            "images_clip": images_clip,
             "input_ids": batch['input_ids'],
             "labels": batch['labels'],
             "attention_mask": batch['attention_mask'],

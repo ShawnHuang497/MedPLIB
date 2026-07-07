@@ -2,7 +2,7 @@
 time=$(date +%Y-%m-%d-%H-%M-%S)
 export NCCL_DEBUG=INFO
 
-exp_name="medplib-7b-stage3"
+exp_name="medplib-7b-stage4"
 exp_dir="runs/$exp_name"
 mkdir -p "$exp_dir"
 
@@ -35,7 +35,7 @@ TRANSFORMERS_OFFLINE=1 deepspeed --include=localhost:0,1,2,3 --master_port=64999
   --save_steps 500 \
   --sam_img_size 256 \
   --train_mask_decoder \
-  --moe_enable ture \
+  --moe_enable True \
   --moe_mode dense \
   --num_experts 2 \
   --capacity_factor 1.5 \

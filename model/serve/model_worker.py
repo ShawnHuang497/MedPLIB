@@ -479,7 +479,7 @@ class ModelWorker:
                         if pred_embeddings.shape[0] > 1:
                             pred_embeddings = pred_embeddings[:1, :]
                         # use the last hidden state when there is no seg tokens
-                        elif pred_embeddings.shape[0]:
+                        elif pred_embeddings.shape[0] == 0:
                             pred_embeddings = last_hidden_state[:1, -2:-1, :].squeeze(1)
 
                         seg_token_counts = seg_token_mask.int().sum(-1)  # [bs, ]

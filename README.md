@@ -1,40 +1,47 @@
 
 
 
-<!-- The official repository of MedPLIB: Towards a Multimodal Large Language Model with Pixel-Level Insight for Biomedicine. -->
+<!-- The official repository for MedPLIB and From Image to Pixels. -->
 <p align="center">
     <img src="assets/logo.png" width="150" style="margin-bottom: 0.2;"/>
-<p>
-<h2 align="center"> <a href="">Towards a Multimodal Large Language Model with Pixel-Level Insight for Biomedicine</a></h2>
-<a src="https://img.shields.io/badge/cs.CV-2312.09278-b31b1b?logo=arxiv&logoColor=red" href="https://arxiv.org/pdf/2412.09278"> <img src="https://img.shields.io/badge/cs.CV-2412.09278-b31b1b?logo=arxiv&logoColor=red">
-</a> 
+</p>
 
-<h5 align="center"> If you like our project, please give us a star ⭐ on GitHub for latest update. 
+<h1 align="center">MedPLIB</h1>
+
+<h3 align="center">Fine-Grained Medical Vision-Language Models from Images to Pixels</h3>
+
+<p align="center">
+  MedPLIB: Towards a Multimodal Large Language Model with Pixel-Level Insight for Biomedicine<br>
+  From Image to Pixels: Towards Fine-Grained Medical Vision-Language Models
+</p>
+
+<h5 align="center"> If you like our project, please give us a star ⭐ on GitHub for the latest updates.</h5>
 
 
 
 <p align="center">
     <img src="assets/demo.png"  style="margin-bottom: 0.2;"/>
-<p>
+</p>
 
 
-# 😮 Hightlights
-MedPLIB shows excellent performance in pixel-level understanding in biomedical field.
+# 😮 Highlights
+This repository contains the code for two related works, MedPLIB and From Image to Pixels. MedPLIB focuses on pixel-level understanding for biomedical images.
 
-- ✨ MedPLIB is a biomedical MLLM with a huge breadth of abilities and supports multiple imaging modalities. Not only can it perform image-level visual language tasks like VQA, but it also facilitates question answering at the pixel level.
+- ✨ MedPLIB is a biomedical MLLM that supports multiple imaging modalities. It handles image-level tasks such as VQA and extends visual question answering to pixel-level reasoning.
 
 <p align="center">
     <img src="assets/capa.png"  style="margin-bottom: 0.2;"/>
-<p>
+</p>
 
 
-- ✨ We constructe MeCoVQA Dataset. It comprises an array of 8 modalities with a total of 310k pairs for complex medical imaging question answering and image region understanding.
+- ✨ We construct the MeCoVQA dataset. It comprises an array of 8 modalities with a total of 310k pairs for complex medical imaging question answering and image region understanding.
 <p align="center">
     <img src="assets/data.png"  style="margin-bottom: 0.2;"/>
-<p>
+</p>
 
 
 # 🔥 Updates
+- 2026-04-16: From Image to Pixels was accepted by IEEE TPAMI.
 - 2025-01-09: 🔥🔥🔥 We release the model weight and MeCoVQA dataset.
 - 2024-12-19: We release the code.
 - 2024-12-10: We release the paper.
@@ -77,18 +84,18 @@ CUDA_VISIBLE_DEVICES=0 python -m model.serve.model_worker --host localhost --con
 - Pixel grounding: 
 <p align="center">
     <img src="assets/seg.gif"  style="width: 70%;"/>
-<p>
+</p>
 
 
 - Region VQA:
 <p align="center">
     <img src="assets/rqa.gif"  style="width: 70%;"/>
-<p>
+</p>
 
 - VQA:
 <p align="center">
     <img src="assets/vqa.gif"  style="width: 70%;"/>
-<p>
+</p>
 
 
 # 🛠️Installation
@@ -119,7 +126,7 @@ pip install flash-attn==2.5.2 --no-build-isolation
 
 # 📀Train
 ## Stage I
-We perfrom the pre-training stage I to get the projector checkpoints. Please obtain the llava_med_alignment_500k dataset according to [LLaVA-Med](https://github.com/microsoft/LLaVA-Med), and then follow the usage tutorial of [LLaVA-v1.5](https://github.com/haotian-liu/LLaVA/tree/v1.1.0) to pretrain.
+We perform the pre-training stage I to get the projector checkpoints. Please obtain the llava_med_alignment_500k dataset according to [LLaVA-Med](https://github.com/microsoft/LLaVA-Med), and then follow the usage tutorial of [LLaVA-v1.5](https://github.com/haotian-liu/LLaVA/tree/v1.1.0) to pretrain.
 
 
 ## Stage II
@@ -133,6 +140,42 @@ sh scripts/train_stage3.sh
 ## Stage IV
 ```Shell
 sh scripts/train_stage4.sh
+```
+
+## MedPLIB-ICL
+MedPLIB-ICL adds in-context segmentation to MedPLIB. Each query image can use 1-3 `(image, mask)` examples as visual context.
+
+```Shell
+sh scripts/train_medplib_icl.sh
+```
+
+MedPLIB-ICL can be trained with two configurable example-mask input modes:
+
+- `overlay`: overlay each example mask on its image.
+- `separate`: encode each example image and mask separately.
+
+To use `separate` mode:
+
+```Shell
+ICL_MASK_MODE=separate sh scripts/train_medplib_icl.sh
+```
+
+The ICL script also includes two optional components:
+
+- `--icl_mask_encoder`: encode example masks into 64 tokens.
+- `--mm_token_compress`: compress each CLIP image from 576 tokens to 256 tokens.
+
+For inference:
+
+```Shell
+sh scripts/infer_medplib_icl.sh
+```
+
+To retrieve examples automatically with image-RAG:
+
+```Shell
+sh scripts/build_medplib_icl_rag_index.sh
+sh scripts/infer_medplib_icl_rag.sh
 ```
 
 
@@ -163,7 +206,7 @@ Infer to generate the prediction jsonl file.
 sh model/eval/infer_parallel_medplib.sh
 ```
 
-Calcuate the metrics.
+Calculate the metrics.
 
 ```Shell
 python model/eval/cal_metric.py \
@@ -180,7 +223,7 @@ We thank the following works for giving us the inspiration and part of the code:
 ### Intended Use
 The data, code, and model checkpoints are intended to be used solely for (I) future research on visual-language processing and (II) reproducibility of the experimental results reported in the reference paper. The data, code, and model checkpoints are not intended to be used in clinical care or for any clinical decision making purposes.
 ### Primary Intended Use
-The primary intended use is to support AI researchers reproducing and building on top of this work. MedPLIB and its associated models should be helpful for exploring various biomedical pixel grunding and vision question answering (VQA) research questions.
+The primary intended use is to support AI researchers reproducing and building on top of this work. MedPLIB and its associated models should be helpful for exploring various biomedical pixel grounding and vision question answering (VQA) research questions.
 ### Out-of-Scope Use
 Any deployed use case of the model --- commercial or otherwise --- is out of scope. Although we evaluated the models using a broad set of publicly-available research benchmarks, the models and evaluations are intended for research use only and not intended for deployed use cases. 
 
@@ -200,5 +243,13 @@ If you find our paper and code useful in your research, please consider giving a
   author={Huang, Xiaoshuang and Shen, Lingdong and Liu, Jia and Shang, Fangxin and Li, Hongxiang and Huang, Haifeng and Yang, Yehui},
   journal={arXiv preprint arXiv:2412.09278},
   year={2024}
+}
+
+@article{shen2026image,
+  title={From Image to Pixels: towards Fine-Grained Medical Vision-Language Models},
+  author={Shen, Lingdong and Huang, Xiaoshuang and Shang, Fangxin and Zhang, Xudong and Yang, Yehui and Fan, Bin and Xiang, Shiming},
+  journal={IEEE Transactions on Pattern Analysis and Machine Intelligence},
+  year={2026},
+  publisher={IEEE}
 }
 ```

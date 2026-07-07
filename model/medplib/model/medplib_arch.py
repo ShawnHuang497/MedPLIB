@@ -64,6 +64,50 @@ def point_sample(input, point_coords, return_dtype, **kwargs):
     return output
 
 
+class TokenCompressor(nn.Module):
+    def __init__(self, hidden_size, num_tokens=256):
+        super().__init__()
+        self.num_tokens = num_tokens
+        self.pool = nn.AdaptiveAvgPool1d(num_tokens)
+        self.norm = nn.LayerNorm(hidden_size)
+        self.proj = nn.Linear(hidden_size, hidden_size)
+
+    def forward(self, x):
+        x = self.pool(x.transpose(1, 2)).transpose(1, 2)
+        return self.proj(self.norm(x))
+
+
+class MaskTokenEncoder(nn.Module):
+    def __init__(self, hidden_size, num_tokens=64):
+        super().__init__()
+        self.num_tokens = num_tokens
+        self.encoder = nn.Sequential(
+            nn.Conv2d(1, 64, kernel_size=3, stride=2, padding=1),
+            nn.GELU(),
+            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
+            nn.GELU(),
+            nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1),
+            nn.GELU(),
+            nn.Conv2d(256, 256, kernel_size=3, stride=2, padding=1),
+            nn.GELU(),
+        )
+        self.pool = nn.AdaptiveAvgPool1d(num_tokens)
+        self.proj = nn.Linear(256, hidden_size)
+        self.norm = nn.LayerNorm(hidden_size)
+
+    def forward(self, masks):
+        if masks.dim() == 3:
+            masks = masks.unsqueeze(1)
+        if masks.shape[1] != 1:
+            masks = masks[:, :1]
+        dtype = self.proj.weight.dtype
+        device = self.proj.weight.device
+        masks = masks.to(device=device, dtype=dtype)
+        features = self.encoder(masks)
+        features = self.pool(features.flatten(2)).transpose(1, 2)
+        return self.norm(self.proj(features))
+
+
 class LlavaMetaModel:
     def __init__(self, config):
         super(LlavaMetaModel, self).__init__(config)
@@ -72,6 +116,16 @@ class LlavaMetaModel:
         self.vision_tower = build_vision_tower(config, delay_load=False)
         # self.mm_projector = nn.Linear(config.mm_hidden_size, config.hidden_size)
         self.mm_projector = build_vision_projector(config)
+        if getattr(config, "mm_token_compress", False):
+            self.mm_token_compressor = TokenCompressor(
+                config.hidden_size,
+                getattr(config, "mm_compressed_token_count", 256),
+            )
+        if getattr(config, "icl_mask_encoder", False):
+            self.mask_encoder = MaskTokenEncoder(
+                config.hidden_size,
+                getattr(config, "mask_encoder_token_count", 64),
+            )
 
         # if config.region_fea_adapter:
         self.region_fea_adapter = nn.Linear(config.mm_hidden_size, config.hidden_size)
@@ -144,6 +198,8 @@ class LlavaMetaForCausalLM(ABC):
     def encode_images(self, images, region_flag=False, region_geo_sampler=False):
         image_features = self.get_model().get_vision_tower()(images)
         projected_image_features = self.get_model().mm_projector(image_features)
+        if getattr(self.config, "mm_token_compress", False):
+            projected_image_features = self.get_model().mm_token_compressor(projected_image_features)
 
         if region_flag:
             if region_geo_sampler:
@@ -155,8 +211,12 @@ class LlavaMetaForCausalLM(ABC):
 
         return image_features, projected_image_features, new_region_feature_map
 
+    def encode_masks(self, mask_images):
+        return self.get_model().mask_encoder(mask_images)
+
     def prepare_inputs_labels_for_multimodal(
-        self, input_ids, attention_mask, past_key_values, labels, images, region_masks, valid_region_masks_bool
+        self, input_ids, attention_mask, past_key_values, labels, images, region_masks, valid_region_masks_bool,
+        mask_images=None, image_token_types=None
     ):
         if region_masks is None:
             region_flag = False
@@ -182,14 +242,40 @@ class LlavaMetaForCausalLM(ABC):
                     device=attention_mask.device,
                 )
             return input_ids, attention_mask, past_key_values, None, labels
-        if type(images) is list or images.ndim == 5:
+        image_features_per_token = False
+        if image_token_types is not None and mask_images is not None and len(mask_images) > 0:
+            assert type(images) is list or images.ndim == 5
             assert region_flag == False
             concat_images = torch.cat([image for image in images], dim=0)
             raw_image_features, image_features, region_feature_map = self.encode_images(concat_images, region_flag, region_geo_sampler)
-            # image_features = self.encode_images(concat_images)
+            image_features = [single_image_features for single_image_features in image_features]
+
+            concat_masks = torch.cat([mask for mask in mask_images], dim=0)
+            mask_features = [single_mask_features for single_mask_features in self.encode_masks(concat_masks)]
+
+            combined_features = []
+            image_idx, mask_idx = 0, 0
+            for sample_token_types in image_token_types:
+                for token_type in sample_token_types:
+                    if token_type == "mask":
+                        combined_features.append(mask_features[mask_idx])
+                        mask_idx += 1
+                    else:
+                        combined_features.append(image_features[image_idx])
+                        image_idx += 1
+            image_features = combined_features
+            image_features_per_token = True
+        elif type(images) is list or images.ndim == 5:
+            assert region_flag == False
+            concat_images = torch.cat([image for image in images], dim=0)
+            raw_image_features, image_features, region_feature_map = self.encode_images(concat_images, region_flag, region_geo_sampler)
             split_sizes = [image.shape[0] for image in images]
-            image_features = torch.split(image_features, split_sizes, dim=0)
-            image_features = [x.flatten(0, 1) for x in image_features]
+            image_features = [
+                single_image_features
+                for sample_features in torch.split(image_features, split_sizes, dim=0)
+                for single_image_features in sample_features
+            ]
+            image_features_per_token = True
         else:
             raw_image_features, image_features, region_feature_map = self.encode_images(images, region_flag, region_geo_sampler)
         if region_flag:
@@ -223,7 +309,8 @@ class LlavaMetaForCausalLM(ABC):
                 new_input_embeds.append(cur_input_embeds)
                 if labels is not None:
                     new_labels.append(labels[batch_idx])
-                cur_image_idx += 1
+                if not image_features_per_token:
+                    cur_image_idx += 1
                 continue
             image_token_indices = torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0]
             cur_new_input_embeds = []
@@ -334,7 +421,8 @@ class LlavaMetaForCausalLM(ABC):
                     cur_new_labels.append(cur_labels)
 
                 # Add region feature into text feature embeddings.
-                assert batch_idx+1 == cur_image_idx
+                if not image_features_per_token:
+                    assert batch_idx+1 == cur_image_idx
                 if region_flag and valid_region_masks_bool[batch_idx] is not None:
                     for idx,indice in enumerate(region_indices):
                         region_features_idx = torch.sum(valid_region_masks_bool[:batch_idx+1]).item() - 1

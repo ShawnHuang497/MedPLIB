@@ -24,7 +24,7 @@ from torch.utils.data import Dataset, Subset
 from model.LISA import LISAForCausalLM
 from model.MedPLIB import MedPLIBForCausalLM
 from model.medplib import conversation as conversation_lib
-from datasets import LazySupervisedDataset, DataCollatorForSupervisedDataset
+from datasets import ICLLazySupervisedDataset, LazySupervisedDataset, DataCollatorForSupervisedDataset
 from utils.utils import (DEFAULT_IM_END_TOKEN, DEFAULT_IM_START_TOKEN,
                          AverageMeter, ProgressMeter, Summary, dict_to_cuda,
                          intersectionAndUnionGPU, ADD_OTHERS_TOKENS)
@@ -59,6 +59,12 @@ def parse_args(args):
     parser.add_argument('--is_multimodal', action='store_true', default=True, help='Whether to use multimodal data.')
     parser.add_argument('--val_data_path', type=str, default='/tmp/v2_mnt/HCG/huangxiaoshuang/med-vqa-dataset/ImageClef-2019-VQA-Med/test_llavaformat_oneturn_open.json', help='Path to the JSON file containing the data.')
     parser.add_argument('--answer_type', type=str, default='closed', help='answer_type.')
+    parser.add_argument('--icl_enable', action='store_true', default=False, help='Enable MedPLIB-ICL multi-image in-context segmentation data.')
+    parser.add_argument('--icl_mask_mode', type=str, default='overlay', choices=['overlay', 'separate'], help='How MedPLIB-ICL encodes example masks.')
+    parser.add_argument('--icl_mask_encoder', action='store_true', default=False, help='Encode ICL example masks with a lightweight 64-token mask encoder.')
+    parser.add_argument('--mask_encoder_token_count', type=int, default=64, help='Number of tokens emitted by the optional ICL mask encoder.')
+    parser.add_argument('--mm_token_compress', action='store_true', default=False, help='Compress CLIP image tokens before feeding the LLM.')
+    parser.add_argument('--mm_compressed_token_count', type=int, default=256, help='Number of tokens after optional CLIP token compression.')
 
 
     parser.add_argument("--val_batch_size", default=1, type=int)
@@ -157,6 +163,11 @@ def get_gating_logit_by_hook(model):
             m.register_forward_hook(cur_hook.hook_fun)
             fea_hooks.append(cur_hook)
     return fea_hooks
+
+def cast_images_clip(images_clip, dtype):
+    if isinstance(images_clip, list):
+        return [image.to(dtype=dtype) for image in images_clip]
+    return images_clip.to(dtype=dtype)
 
 def split_list(lst, n):
     """Split a list into n (roughly) equal-sized chunks"""
@@ -264,12 +275,18 @@ def main(args):
                 "image_aspect_ratio": args.image_aspect_ratio,
                 "is_multimodal": args.is_multimodal,
                 "mm_use_im_start_end": args.use_mm_start_end,
+                "icl_mask_mode": args.icl_mask_mode,
+                "icl_mask_encoder": args.icl_mask_encoder,
+                "mask_encoder_token_count": args.mask_encoder_token_count,
+                "mm_token_compress": args.mm_token_compress,
+                "mm_compressed_token_count": args.mm_compressed_token_count,
                 "image_processor": vision_tower.image_processor
                 }
 
     data_args = types.SimpleNamespace(**data_args)
 
-    val_dataset = LazySupervisedDataset(args.val_data_path, tokenizer, data_args, args.sam_img_size)
+    dataset_cls = ICLLazySupervisedDataset if args.icl_enable else LazySupervisedDataset
+    val_dataset = dataset_cls(args.val_data_path, tokenizer, data_args, args.sam_img_size)
 
     if args.eval_vqa:
         val_indices = get_chunk(range(len(val_dataset)), args.num_chunks, args.chunk_idx)
@@ -400,11 +417,11 @@ def validate_vqa(val_loader, model_engine, epoch, args, tokenizer, fea_hooks=Non
             input_dict = dict_to_cuda(input_dict)
 
         if args.precision == "fp16":
-            input_dict["images_clip"] = input_dict["images_clip"].half()
+            input_dict["images_clip"] = cast_images_clip(input_dict["images_clip"], torch.float16)
         elif args.precision == "bf16":
-            input_dict["images_clip"] = input_dict["images_clip"].bfloat16()
+            input_dict["images_clip"] = cast_images_clip(input_dict["images_clip"], torch.bfloat16)
         else:
-            input_dict["images_clip"] = input_dict["images_clip"].float()
+            input_dict["images_clip"] = cast_images_clip(input_dict["images_clip"], torch.float32)
 
         indices = (input_dict['input_ids'] == 29901).nonzero(as_tuple=True)
         input_ids = input_dict['input_ids'][:, :indices[1][-1]+1]
@@ -414,6 +431,8 @@ def validate_vqa(val_loader, model_engine, epoch, args, tokenizer, fea_hooks=Non
                 input_ids,
                 images=input_dict['images_clip'],
                 attention_mask=attention_mask,
+                mask_images=input_dict.get("mask_images", None),
+                image_token_types=input_dict.get("image_token_types", None),
                 do_sample=True if args.temperature > 0 else False,
                 temperature=args.temperature,
                 top_p=args.top_p,
@@ -493,13 +512,13 @@ def validate_seg(val_loader, model_engine, epoch, args, tokenizer, fea_hooks=Non
             input_dict = dict_to_cuda(input_dict)
         if args.precision == "fp16":
             input_dict["images"] = input_dict["images"].half()
-            input_dict["images_clip"] = input_dict["images_clip"].half()
+            input_dict["images_clip"] = cast_images_clip(input_dict["images_clip"], torch.float16)
         elif args.precision == "bf16":
             input_dict["images"] = input_dict["images"].bfloat16()
-            input_dict["images_clip"] = input_dict["images_clip"].bfloat16()
+            input_dict["images_clip"] = cast_images_clip(input_dict["images_clip"], torch.bfloat16)
         else:
             input_dict["images"] = input_dict["images"].float()
-            input_dict["images_clip"] = input_dict["images_clip"].float()
+            input_dict["images_clip"] = cast_images_clip(input_dict["images_clip"], torch.float32)
 
         indices = (input_dict['input_ids'] == 29901).nonzero(as_tuple=True)
         input_ids = input_dict['input_ids'][:, :indices[1][-1]+1]
@@ -514,7 +533,10 @@ def validate_seg(val_loader, model_engine, epoch, args, tokenizer, fea_hooks=Non
             input_dict['label_list'],
             max_new_tokens=1024,
             tokenizer=tokenizer,
-            attention_mask=attention_mask
+            attention_mask=attention_mask,
+            mask_images=input_dict.get("mask_images", None),
+            image_token_types=input_dict.get("image_token_types", None),
+            image_token_lengths=input_dict.get("image_token_lengths", None),
         )
         if fea_hooks is not None:
 

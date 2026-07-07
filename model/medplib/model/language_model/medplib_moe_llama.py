@@ -336,6 +336,8 @@ class MedPLIBMoELlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
             return_dict: Optional[bool] = None,
             region_masks: Optional[List[torch.Tensor]] = None,
             valid_region_masks_bool: Optional[List[torch.BoolTensor]] = None,
+            mask_images: Optional[List[torch.Tensor]] = None,
+            image_token_types: Optional[List[List[str]]] = None,
     ) -> Union[Tuple, MoECausalLMOutputWithPast]:
         # print('before prepare_inputs_labels_for_multimodal')
         # import ipdb
@@ -357,6 +359,8 @@ class MedPLIBMoELlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
                 images,
                 region_masks,
                 valid_region_masks_bool,
+                mask_images=mask_images,
+                image_token_types=image_token_types,
             )
         # import ipdb
         # ipdb.set_trace()
@@ -453,6 +457,8 @@ class MedPLIBMoELlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
         images=None,
         region_masks=[],
         valid_region_masks_bool=[],
+        mask_images=None,
+        image_token_types=None,
         **kwargs
     ):
         if past_key_values:
@@ -472,6 +478,8 @@ class MedPLIBMoELlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
                 "images": images,
                 "region_masks": region_masks,
                 "valid_region_masks_bool": valid_region_masks_bool,
+                "mask_images": mask_images,
+                "image_token_types": image_token_types,
             }
         )
         return model_inputs
